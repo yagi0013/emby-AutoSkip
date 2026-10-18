@@ -1,0 +1,25 @@
+# Local configuration and credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Runtime data / exported settings
+api/data/
+emby-autoskip-settings-*.json
+emby-autoskip-sync-code*.txt
+
+# Editor / OS / local tools
+.vscode/
+.idea/
+.agents/
+.codex/
+.aws/
+.DS_Store
+Thumbs.db
+*.swp
+*.bak
+node_modules/

@@ -1,0 +1,7 @@
+sudo cp ~/emby/emby-autoskip.js /opt/emby-server/system/dashboard-ui/emby-autoskip.js
+
+
+
+/opt/emby-server/system/dashboard-ui/index.html
+にemby-autoskip.js呼び出し用タグを記入する
+<script src="emby-autoskip.js?v=1.6.4" defer></script>
