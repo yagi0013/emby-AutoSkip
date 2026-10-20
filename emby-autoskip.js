@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Emby AutoSkip - First Play + Undo
 // @namespace    local.emby.autoskip
-// @version      1.11.2
+// @version      1.12.0
 // @description  Intro / OP / Outro auto skip with first-play rules, manual skip and undo
 // @match        http://*/*
 // @match        https://*/*
@@ -26,7 +26,7 @@
   const HISTORY_KEY = 'emby-autoskip-first-play-history-v17';
   const ADVANCED_STORE_KEY =
     'emby-autoskip-advanced-settings-v1';
-  const SCRIPT_VERSION = '1.11.2';
+  const SCRIPT_VERSION = '1.12.0';
   const SYNC_PLUGIN_API_VERSION = 1;
   const BACKUP_FORMAT = 'emby-autoskip-settings-backup';
   const BACKUP_FORMAT_VERSION = 1;
@@ -70,7 +70,8 @@
     manualSkipButton: true,
     countdown: true,
     timelineMarkers: true,
-    chapterShortcuts: true
+    chapterShortcuts: true,
+    skipBadges: true
   };
 
   const skipTypes = ['intro', 'op', 'outro'];
@@ -147,6 +148,9 @@
     }
     if (typeof saved.chapterShortcuts === 'boolean') {
       settings.chapterShortcuts = saved.chapterShortcuts;
+    }
+    if (typeof saved.skipBadges === 'boolean') {
+      settings.skipBadges = saved.skipBadges;
     }
     settings.op = toPolicy(saved.op, settings.op);
     settings.outro = toPolicy(saved.outro, settings.outro);
@@ -362,6 +366,10 @@
         typeof importedSettings.timelineMarkers !== 'boolean'
       ) ||
       (
+        importedSettings.skipBadges !== undefined &&
+        typeof importedSettings.skipBadges !== 'boolean'
+      ) ||
+      (
         importedSettings.chapterShortcuts !== undefined &&
         typeof importedSettings.chapterShortcuts !== 'boolean'
       )
@@ -474,7 +482,8 @@
         timelineMarkers:
           importedSettings.timelineMarkers !== false,
         chapterShortcuts:
-          importedSettings.chapterShortcuts !== false
+          importedSettings.chapterShortcuts !== false,
+        skipBadges: importedSettings.skipBadges !== false
       }),
       [ADVANCED_STORE_KEY]: JSON.stringify(importedAdvanced),
       [SERIES_KEY]: JSON.stringify(importedSeries),
@@ -534,6 +543,7 @@
     settings.countdown = restoredSettings.countdown;
     settings.timelineMarkers = restoredSettings.timelineMarkers;
     settings.chapterShortcuts = restoredSettings.chapterShortcuts;
+    settings.skipBadges = restoredSettings.skipBadges;
 
     for (const key of Object.keys(ADVANCED_CONFIG_FIELDS)) {
       CONFIG[key] = restoredAdvanced[key];
@@ -748,6 +758,7 @@
       )[0] || null;
 
   let timelineController = null;
+  let badgeController = null;
 
   // =====================================
   // 右端収納式パネル + カウントダウン
@@ -1226,12 +1237,32 @@
       document.createTextNode('チャプターショートカット')
     );
 
+    const badgeRow = document.createElement('label');
+    const badgeCheck = document.createElement('input');
+
+    badgeRow.style.cssText = countdownRow.style.cssText;
+    badgeCheck.type = 'checkbox';
+    badgeCheck.checked = settings.skipBadges;
+    badgeCheck.style.cssText = countdownCheck.style.cssText;
+    badgeCheck.addEventListener('change', () => {
+      settings.skipBadges = badgeCheck.checked;
+      saveSettings();
+      badgeController?.update();
+    });
+    badgeRow.title =
+      'スキップ対象を探査して表示します。OFFにすると探査も停止します';
+    badgeRow.append(
+      badgeCheck,
+      document.createTextNode('スキップ対象バッジを表示')
+    );
+
     settingsPage.append(
       sectionTitle('共通表示'),
       manualSkipRow,
       countdownRow,
       timelineRow,
-      shortcutRow
+      shortcutRow,
+      badgeRow
     );
 
     const advancedDetails = document.createElement('details');
@@ -1556,15 +1587,22 @@
       }
     }
 
+    let playbackAvailable = false;
+
     function renderSettings() {
       const hasScope = !!(
-        state.scopeResolved && state.scopeKey
+        playbackAvailable &&
+        state.scopeResolved &&
+        state.scopeKey &&
+        (
+          state.mode === 'ready' ||
+          state.mode === 'no-segments'
+        )
       );
 
       renderTargetTimes();
 
       if (
-        state.scopeResolved &&
         !hasScope &&
         selectedScope.value === 'series'
       ) {
@@ -2005,14 +2043,18 @@
 
     function paintHandle() {
       const skipTargetDetected = hasUsableSkipTarget();
-      const statusText = state.autoSkipSuspended
-        ? '一時停止中'
+      const statusText = !playbackAvailable
+        ? '再生待機中'
         : (
-            skipTargetDetected
-              ? 'スキップ機能利用可能・対象検知済み'
-              : 'スキップ機能利用不可・対象未検知'
+            state.autoSkipSuspended
+              ? '一時停止中'
+              : (
+                  skipTargetDetected
+                    ? 'スキップ機能利用可能・対象検知済み'
+                    : 'スキップ機能利用不可・対象未検知'
+                )
           );
-      const statusColor = state.autoSkipSuspended
+      const statusColor = !playbackAvailable || state.autoSkipSuspended
         ? '#4b545d'
         : (skipTargetDetected ? '#315f43' : '#71383d');
 
@@ -2296,13 +2338,14 @@
     return {
       root,
 
-      setVisible: visible => {
-        root.style.display =
-          visible ? 'block' : 'none';
+      setPlaybackAvailable: available => {
+        const next = !!available;
 
-        if (!visible && isOpen) {
-          setOpen(false);
-        }
+        if (playbackAvailable === next) return;
+
+        playbackAvailable = next;
+        renderSettings();
+        paintHandle();
       },
 
       mountSyncPage,
@@ -2344,6 +2387,8 @@
         countdownCheck.checked = settings.countdown;
         timelineCheck.checked = settings.timelineMarkers;
         shortcutCheck.checked = settings.chapterShortcuts;
+        badgeCheck.checked = settings.skipBadges;
+        badgeController?.update();
 
         for (const key of Object.keys(ADVANCED_CONFIG_FIELDS)) {
           advancedInputs[key].value = String(CONFIG[key]);
@@ -2849,7 +2894,7 @@
     location.origin
   ])];
 
-  async function apiGet(path) {
+  async function apiGet(path, signal) {
     const auth = loginInfo();
 
     if (!auth) {
@@ -2871,7 +2916,8 @@
             'Accept': 'application/json'
           },
           credentials: 'same-origin',
-          cache: 'no-store'
+          cache: 'no-store',
+          signal
         });
 
         if (!res.ok) {
@@ -2887,12 +2933,227 @@
         return result;
 
       } catch (error) {
+        if (signal?.aborted) throw error;
         lastError = error;
       }
     }
 
     throw lastError ||
       new Error('API接続失敗');
+  }
+
+  // =====================================
+  // 一覧のスキップ対象バッジ（再生状態から独立）
+  // =====================================
+
+  function makeSkipBadges() {
+    const selector = '.card, .listItem';
+    const supported = new Set(['Series', 'Season', 'Episode', 'Movie']);
+    const cache = new Map();
+    const pending = new Set();
+    let context = '';
+    let controller = new AbortController();
+    let scanTimer = null;
+
+    const style = document.createElement('style');
+    style.textContent = `
+      .autoskip-badge-host { position: relative !important; }
+      .autoskip-skip-badge {
+        position: absolute; left: 7px; bottom: 10px; z-index: 10;
+        display: flex; align-items: center; justify-content: center;
+        box-sizing: border-box; width: 23px; height: 23px;
+        border: 2px solid #fff; border-radius: 50%;
+        background: #176b38; color: #fff;
+        font: bold 14px/1 sans-serif; text-shadow: none;
+        box-shadow: 0 1px 4px #000b; cursor: help;
+      }
+      .autoskip-skip-badge:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+    `;
+    document.head.appendChild(style);
+
+    function removeBadge(card) {
+      card.querySelectorAll('.autoskip-skip-badge').forEach(b => b.remove());
+      card.querySelectorAll('.autoskip-badge-host').forEach(h => {
+        h.classList.remove('autoskip-badge-host');
+      });
+    }
+
+    function cardItem(card) {
+      // Embyの仮想リストはdata-idを持たない場合がある。
+      const container = card.closest('.itemsContainer');
+      let bound;
+      try {
+        bound = container?.getItemFromElement?.(card);
+      } catch (_) {}
+      return {
+        Id: String(bound?.Id || bound?.ItemId || card.getAttribute('data-id') || ''),
+        Type: bound?.Type || card.getAttribute('data-type') || '',
+        ServerId: bound?.ServerId || card.getAttribute('data-serverid') || ''
+      };
+    }
+
+    function render(card, key, label) {
+      const old = card.querySelector('.autoskip-skip-badge');
+      if (old?.dataset.skipKey === key && old.title === label) return;
+      removeBadge(card);
+      if (!label) return;
+      const image = card.querySelector(
+        '.cardImageContainer, .listItemImageContainer, .listItemImage'
+      );
+      // 話数一覧にはimg要素を直接使う形式もある。imgは子を描画できない。
+      const host = image?.tagName === 'IMG' ? image.parentElement : image;
+      if (!host) return;
+      host.classList.add('autoskip-badge-host');
+      const badge = document.createElement('span');
+      badge.className = 'autoskip-skip-badge';
+      badge.dataset.skipKey = key;
+      badge.textContent = 'S';
+      badge.title = label;
+      badge.setAttribute('aria-label', label);
+      badge.tabIndex = 0;
+      // バッジを操作しても作品の再生・詳細画面への遷移を起こさない。
+      for (const name of ['click', 'dblclick', 'pointerdown', 'keydown']) {
+        badge.addEventListener(name, event => {
+          if (name === 'keydown' && !['Enter', ' '].includes(event.key)) return;
+          event.preventDefault();
+          event.stopPropagation();
+        });
+      }
+      host.appendChild(badge);
+    }
+
+    async function inspectVideo(item, userPath, signal) {
+      let video = item;
+      if (!Array.isArray(video.Chapters)) {
+        video = await apiGet(`${userPath}/${encodeURIComponent(item.Id)}`, signal);
+      }
+      // 未取得を「対象なし」として扱わない。
+      if (!Array.isArray(video.Chapters)) throw new Error('チャプター情報未取得');
+      const duration = Number(video.RunTimeTicks) / TICKS;
+      return buildRanges(video.Chapters, duration).length > 0;
+    }
+
+    async function inspect(item, auth, signal) {
+      const userPath = `/Users/${encodeURIComponent(auth.userId)}/Items`;
+      if (item.Type === 'Episode' || item.Type === 'Movie') {
+        const video = await apiGet(`${userPath}/${encodeURIComponent(item.Id)}`, signal);
+        return await inspectVideo(video, userPath, signal) ? 'Skip対象' : '';
+      }
+
+      let start = 0;
+      let total = null;
+      let matched = 0;
+      let checked = 0;
+      const ids = new Set();
+      do {
+        const query = new URLSearchParams({
+          ParentId: item.Id, Recursive: 'true', IncludeItemTypes: 'Episode',
+          Fields: 'Chapters,RunTimeTicks', StartIndex: String(start), Limit: '100',
+          SortBy: 'SortName', SortOrder: 'Ascending'
+        });
+        const page = await apiGet(`${userPath}?${query}`, signal);
+        if (!Array.isArray(page.Items) || !Number.isInteger(page.TotalRecordCount)) {
+          throw new Error('話数一覧未取得');
+        }
+        if (total !== null && total !== page.TotalRecordCount) {
+          throw new Error('探査中に話数が変更されました');
+        }
+        total = page.TotalRecordCount;
+        if (!page.Items.length && start < total) throw new Error('話数一覧が不完全です');
+        for (const episode of page.Items) {
+          if (!episode.Id || ids.has(episode.Id)) throw new Error('話数一覧の重複');
+          ids.add(episode.Id);
+          if (await inspectVideo(episode, userPath, signal)) matched++;
+          checked++;
+        }
+        start += page.Items.length;
+      } while (start < total);
+      if (checked !== total) throw new Error('話数一覧が不完全です');
+      return matched ? (matched === total ? '全話Skip対象' : '一部Skip対象') : '';
+    }
+
+    function schedule() {
+      if (scanTimer !== null) return;
+      scanTimer = setTimeout(() => {
+        scanTimer = null;
+        scan();
+      }, 150);
+    }
+
+    function reset() {
+      controller.abort();
+      controller = new AbortController();
+      pending.clear();
+      cache.clear();
+      document.querySelectorAll(selector).forEach(removeBadge);
+    }
+
+    function scan() {
+      const auth = loginInfo();
+      const nextContext = settings.skipBadges && auth?.userId
+        ? JSON.stringify([auth.serverId, auth.userId, auth.token])
+        : '';
+      if (context !== nextContext) {
+        context = nextContext;
+        reset();
+      }
+      if (!context) return;
+      const signal = controller.signal;
+      for (const card of document.querySelectorAll(selector)) {
+        const item = cardItem(card);
+        const key = `${item.Type}:${item.Id}`;
+        const rect = card.getBoundingClientRect();
+        const visible = rect.width > 0 && rect.height > 0 &&
+          rect.bottom > 0 && rect.right > 0 &&
+          rect.top < window.innerHeight && rect.left < window.innerWidth;
+        if (!supported.has(item.Type) || !item.Id ||
+            (item.ServerId && auth.serverId && item.ServerId !== auth.serverId)) {
+          removeBadge(card);
+          continue;
+        }
+        const hit = cache.get(key);
+        if (hit && hit.until > Date.now()) {
+          render(card, key, hit.label);
+          continue;
+        }
+        render(card, key, '');
+        if (!visible || pending.has(key) || pending.size >= 2) continue;
+        pending.add(key);
+        void inspect(item, auth, signal).then(label => {
+          if (signal.aborted) return;
+          cache.set(key, {label, until: Date.now() + 5 * 60 * 1000});
+        }).catch(() => {
+          if (signal.aborted) return;
+          // 通信失敗は短時間で再試行する。対象なしとの断定はしない。
+          cache.set(key, {label: '', until: Date.now() + 30 * 1000});
+        }).finally(() => {
+          if (signal.aborted) return;
+          pending.delete(key);
+          while (cache.size > 1000) cache.delete(cache.keys().next().value);
+          schedule();
+        });
+      }
+    }
+
+    const observer = new MutationObserver(records => {
+      if (!settings.skipBadges) return;
+      // 自分自身のバッジ追加・削除による再走査ループを避ける。
+      if (records.some(record => record.type === 'attributes' ||
+          [...record.addedNodes, ...record.removedNodes].some(node =>
+            node.nodeType === 1 && !node.classList.contains('autoskip-skip-badge')))) {
+        schedule();
+      }
+    });
+    observer.observe(document.body, {
+      childList: true, subtree: true, attributes: true,
+      attributeFilter: ['data-id', 'data-type', 'data-index', 'data-serverid']
+    });
+    window.addEventListener('scroll', schedule, true);
+    window.addEventListener('resize', schedule);
+    // 仮想リストの内部データ変更とログイン切替も検知する。
+    setInterval(schedule, 2000);
+    scan();
+    return {update: () => { context = ''; reset(); scan(); }};
   }
 
   // =====================================
@@ -3762,11 +4023,12 @@
   function skipTick() {
     const v = videoNow();
 
-    // 動画があるときだけタブ表示
-    ui.setVisible(!!v);
+    // 設定タブは常時表示し、作品別設定だけ再生中に有効化する。
+    ui.setPlaybackAvailable(!!v);
     timelineController?.update(v);
 
     if (!v) {
+      state.mode = 'waiting-for-video';
       ui.setAction(null);
       return;
     }
@@ -4017,6 +4279,8 @@
   if (window.EmbyAutoSkipSyncPlugin) {
     registerSyncPlugin(window.EmbyAutoSkipSyncPlugin);
   }
+
+  badgeController = makeSkipBadges();
 
   window.dispatchEvent(
     new CustomEvent('emby-autoskip:ready')
