@@ -95,7 +95,7 @@
     shortcut: 'チャプターショートカット',
     badgeHint: 'スキップ対象を探査して表示します。OFFにすると探査も停止します',
     badge: 'スキップ対象バッジを表示',
-    commonDisplay: '共通表示',
+    commonDisplay: '共通設定',
     advanced: '詳細設定',
     countdownStart: '予告開始',
     undoDuration: '戻す表示',
@@ -1464,14 +1464,35 @@
       translatedText('badge')
     );
 
-    settingsPage.append(
-      sectionTitle('commonDisplay'),
+    const commonDetails = document.createElement('details');
+    const commonSummary = document.createElement('summary');
+    const commonContent = document.createElement('div');
+
+    commonDetails.style.cssText = [
+      'margin-top:6px',
+      'padding-top:7px',
+      'border-top:1px solid #43515f'
+    ].join(';');
+    bindText(commonSummary, 'commonDisplay');
+    commonSummary.style.cssText = [
+      'cursor:pointer',
+      'font-size:11px',
+      'font-weight:600',
+      'color:#dbe5ee',
+      'user-select:none'
+    ].join(';');
+    commonContent.append(
       manualSkipRow,
       countdownRow,
       timelineRow,
       shortcutRow,
       badgeRow
     );
+    commonDetails.append(commonSummary, commonContent);
+    commonDetails.addEventListener('toggle', () => {
+      window.requestAnimationFrame(() => position(y));
+    });
+    settingsPage.append(commonDetails);
 
     const advancedDetails = document.createElement('details');
     const advancedSummary = document.createElement('summary');
