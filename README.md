@@ -1,5 +1,7 @@
 # Emby AutoSkip
 
+**日本語** | [English](README.en.md)
+
 Emby Web Playerで、イントロ・前回のあらすじ・OP・EDを自動スキップする非公式JavaScript拡張です。
 Embyのチャプター／イントロマーカーを使い、作品ごとに「見る・飛ばす」を選べます。
 
