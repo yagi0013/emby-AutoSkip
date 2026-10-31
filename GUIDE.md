@@ -2,7 +2,7 @@
 
 [トップページへ戻る](README.md) · [変更履歴](CHANGELOG.md)
 
-対象：本体 v1.12.0 / 同期プラグイン v1.0.5。
+対象：本体 v1.13.0 / 言語プラグイン v1.0.0 / 同期プラグイン v1.0.5。
 
 ## 動作確認済み環境
 
@@ -16,7 +16,8 @@
 
 | パス | 内容 |
 | --- | --- |
-| `emby-autoskip.js` | 現行版 v1.12.0 |
+| `emby-autoskip.js` | 現行版 v1.13.0（日本語内蔵、単体動作） |
+| `emby-autoskip-i18n.js` | 任意追加の9言語プラグイン v1.0.0 |
 | `emby-autoskip-sync.js` | 任意追加の暗号化設定同期プラグイン v1.0.5 |
 | [SYNC_API.md](SYNC_API.md) | 同期APIのインターフェース仕様 |
 | [archive/](archive/) | 旧版ソースと過去の資料 |
@@ -43,6 +44,15 @@
 - 初回視聴履歴：シーズンごとのOP・EDを別々に記録。シーズン情報がない場合は従来どおりシリーズ単位
 - 設定データ移行：設定・初回履歴・タブ位置をJSONファイルへ書き出し、別ブラウザーや別端末で読み込み可能
 - 任意のクラウド同期：別ファイルの同期プラグインと対応APIを利用し、設定・初回履歴をブラウザー側で暗号化して同期
+- 多言語UI：言語プラグイン追加時は10言語から選択可能。自動判定、ページ再読み込みなしの切替、未対応言語の英語フォールバックに対応
+
+### 表示言語
+
+`emby-autoskip.js` は日本語を内蔵しており、言語プラグインなしでも単体動作します。この場合、設定画面の末尾に言語プラグインを追加できることを極小表示します。
+
+`emby-autoskip-i18n.js` を追加すると、日本語・英語・ロシア語・スペイン語・ポルトガル語・イタリア語・フランス語・ドイツ語・ポーランド語・ウクライナ語を選択できます。初期値の「自動（ブラウザー）」は `navigator.languages` と `navigator.language` を使用し、`pt-BR` のような地域付きコードは `pt` として判定します。未対応言語は英語になります。
+
+手動選択は `localStorage` の `emby-autoskip-language-v1` に保存し、切替は再読み込みなしで反映します。「自動（ブラウザー）」を選び直すと自動判定へ戻ります。
 
 ### 一覧のスキップ対象バッジ
 
@@ -95,6 +105,7 @@ Emby標準のシークバーが見えている間は、そのバーへ検出区�
 
 - `/opt/emby-server/system/dashboard-ui/index.html`
 - `/opt/emby-server/system/dashboard-ui/emby-autoskip.js`
+- `/opt/emby-server/system/dashboard-ui/emby-autoskip-i18n.js`（多言語UIを使う場合）
 - `/opt/emby-server/system/dashboard-ui/emby-autoskip-sync.js`（同期機能を使う場合）
 
 このリポジトリの現行 `emby-autoskip.js` をサーバーへダウンロード。以下では `~/emby/emby-autoskip.js` に保存済みとして説明します。
@@ -104,6 +115,7 @@ Emby標準のシークバーが見えている間は、そのバーへ検出区�
 ```bash
 WEB=/opt/emby-server/system/dashboard-ui
 SRC="$HOME/emby/emby-autoskip.js"
+I18N_SRC="$HOME/emby/emby-autoskip-i18n.js"
 SYNC_SRC="$HOME/emby/emby-autoskip-sync.js"
 test -f "$SRC" || { echo "JSが見つかりません: $SRC"; exit 1; }
 sudo ls -l "$WEB/index.html"
@@ -112,6 +124,9 @@ sudo install -d -m 700 /root/emby-autoskip-backup
 sudo cp -a "$WEB/index.html" "/root/emby-autoskip-backup/index.html.$TS"
 if sudo test -f "$WEB/emby-autoskip.js"; then
   sudo cp -a "$WEB/emby-autoskip.js" "/root/emby-autoskip-backup/emby-autoskip.js.$TS"
+fi
+if sudo test -f "$WEB/emby-autoskip-i18n.js"; then
+  sudo cp -a "$WEB/emby-autoskip-i18n.js" "/root/emby-autoskip-backup/emby-autoskip-i18n.js.$TS"
 fi
 if sudo test -f "$WEB/emby-autoskip-sync.js"; then
   sudo cp -a "$WEB/emby-autoskip-sync.js" "/root/emby-autoskip-backup/emby-autoskip-sync.js.$TS"
@@ -122,17 +137,21 @@ fi
 
 ```bash
 sudo install -m 644 "$SRC" "$WEB/emby-autoskip.js"
+if test -f "$I18N_SRC"; then
+  sudo install -m 644 "$I18N_SRC" "$WEB/emby-autoskip-i18n.js"
+fi
 if test -f "$SYNC_SRC"; then
   sudo install -m 644 "$SYNC_SRC" "$WEB/emby-autoskip-sync.js"
 fi
 sudo nano "$WEB/index.html"
 ```
 
-`</body>` の**直前**に次の行を追加します。同期プラグインを使わない場合は1行目を省略できます。旧バージョンの読込タグがある場合は**追加せず置き換える**こと。
+`</body>` の**直前**に次の行を追加します。同期・言語プラグインは使わない行を省略できます。旧バージョンの読込タグがある場合は**追加せず置き換える**こと。
 
 ```html
 <script src="emby-autoskip-sync.js?v=1.0.5" defer></script>
-<script src="emby-autoskip.js?v=1.12.0" defer></script>
+<script src="emby-autoskip-i18n.js?v=1.0.0" defer></script>
+<script src="emby-autoskip.js?v=1.13.0" defer></script>
 ```
 
 `?v=` はキャッシュ更新用の識別子です。今後JSを更新した場合も、それぞれのバージョンに合わせて変更してください。同期JSが欠損・停止していても、メインの自動スキップ機能はLocalStorageを使って通常動作します。
@@ -141,8 +160,10 @@ sudo nano "$WEB/index.html"
 
 ```bash
 sudo ls -lh "$WEB/emby-autoskip.js"
+sudo ls -lh "$WEB/emby-autoskip-i18n.js"
 sudo ls -lh "$WEB/emby-autoskip-sync.js"
 sudo grep -nF 'emby-autoskip.js' "$WEB/index.html"
+sudo grep -nF 'emby-autoskip-i18n.js' "$WEB/index.html"
 sudo grep -nF 'emby-autoskip-sync.js' "$WEB/index.html"
 sudo grep -cF 'emby-autoskip.js' "$WEB/index.html"
 ```
@@ -157,9 +178,10 @@ sudo grep -cF 'emby-autoskip.js' "$WEB/index.html"
 
 1. Embyを視聴するブラウザーにTampermonkeyをインストール。
 2. 新規UserScriptへ現行 `emby-autoskip.js` の内容を貼り付け、保存して有効化。
-3. 同期機能を使う場合は、別の新規UserScriptへ `emby-autoskip-sync.js` の内容を貼り付けて有効化。
-4. 両方の `@match` は利用中のEmbyサーバーURLへ限定することを推奨。
-5. Emby Webを再読み込みし、右端タブが表示されるか確認。
+3. 多言語UIを使う場合は、別の新規UserScriptへ `emby-autoskip-i18n.js` の内容を貼り付けて有効化。
+4. 同期機能を使う場合は、別の新規UserScriptへ `emby-autoskip-sync.js` の内容を貼り付けて有効化。
+5. 各UserScriptの `@match` は利用中のEmbyサーバーURLへ限定することを推奨。
+6. Emby Webを再読み込みし、右端タブが表示されるか確認。
 
 同じブラウザーでサーバー配信方式と併用しないこと。EmbyのAndroid／iOSネイティブアプリはこの方式の対象外です。
 
@@ -168,7 +190,7 @@ sudo grep -cF 'emby-autoskip.js' "$WEB/index.html"
 Emby Webで動画を再生し、ブラウザーの開発者ツール `F12` → Consoleで実行します。
 
 ```javascript
-EmbyAutoSkip.version            // "1.12.0"
+EmbyAutoSkip.version            // "1.13.0"
 EmbyAutoSkip.status()           // 現在の再生情報・適用設定・履歴・操作状態
 EmbyAutoSkip.inspect()          // チャプター一覧と判定したスキップ区間
 EmbyAutoSkip.retry()            // Emby API情報を再取得
@@ -241,6 +263,7 @@ Emby Webと同じオリジンの**各ブラウザー**に保存します。同�
 - シーズン／シリーズ初回再生履歴：`emby-autoskip-first-play-history-v17`
 - タブ位置：`emby-autoskip-edge-position-v14`
 - 詳細設定：`emby-autoskip-advanced-settings-v1`
+- 表示言語：`emby-autoskip-language-v1`
 - 同期接続情報：`emby-autoskip-sync-profile-v1`（同期プラグイン導入時）
 - 同期API URL：`emby-autoskip-sync-api-base-v1`（同期プラグイン導入時）
 
@@ -274,6 +297,7 @@ Node.jsがある環境では、次のコマンドで現行JSの構文を確認�
 
 ```bash
 node --check emby-autoskip.js
+node --check emby-autoskip-i18n.js
 node --check emby-autoskip-sync.js
 ```
 

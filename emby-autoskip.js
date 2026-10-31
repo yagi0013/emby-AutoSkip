@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Emby AutoSkip - First Play + Undo
 // @namespace    local.emby.autoskip
-// @version      1.12.0
+// @version      1.13.0
 // @description  Intro / OP / Outro auto skip with first-play rules, manual skip and undo
 // @match        http://*/*
 // @match        https://*/*
@@ -26,8 +26,10 @@
   const HISTORY_KEY = 'emby-autoskip-first-play-history-v17';
   const ADVANCED_STORE_KEY =
     'emby-autoskip-advanced-settings-v1';
-  const SCRIPT_VERSION = '1.12.0';
+  const LANGUAGE_STORE_KEY = 'emby-autoskip-language-v1';
+  const SCRIPT_VERSION = '1.13.0';
   const SYNC_PLUGIN_API_VERSION = 1;
+  const LANGUAGE_PLUGIN_API_VERSION = 1;
   const BACKUP_FORMAT = 'emby-autoskip-settings-backup';
   const BACKUP_FORMAT_VERSION = 1;
   const BACKUP_MAX_BYTES = 2 * 1024 * 1024;
@@ -56,7 +58,200 @@
     drawerAnimationSeconds: {min: 0, max: 1.5, step: 0.05},
     actionAnimationSeconds: {min: 0, max: 1.5, step: 0.05}
   });
-  const CANCEL_LABEL = 'キャンセル';
+  const JA_MESSAGES = Object.freeze({
+    cancel: 'キャンセル',
+    auto: '自動（ブラウザー）',
+    language: '表示言語',
+    languagePluginHint:
+      '多言語表示には言語プラグインを追加できます',
+    handleAria:
+      '自動スキップ設定。クリックで開く、上下ドラッグで移動',
+    handleTitle: 'クリック: 設定 / 上下ドラッグ: 位置移動',
+    drawerAria: 'Emby 自動スキップ設定',
+    title: '⏭ 自動スキップ',
+    syncUnavailable: '設定同期は利用できません',
+    syncLoadFailed:
+      '同期プラグインを読み込めませんでした。自動スキップは通常どおり利用できます。',
+    suspend: 'AutoSkip 一時停止',
+    global: '全体',
+    thisSeries: 'このシリーズ',
+    thisSeason: 'このシーズン',
+    useGlobal: '全体設定を使用',
+    skipSettings: 'スキップ設定',
+    intro: 'イントロ・前回のあらすじ',
+    op: 'オープニング（OP）',
+    outro: 'アウトロ（ED）',
+    alwaysPlay: '常に再生',
+    firstOnly: '初回のみ再生',
+    alwaysSkip: '常にスキップ',
+    resetHistory: '履歴をリセット',
+    manualSkipHint:
+      '「常に再生」または初回再生のOP／ED区間に表示します',
+    manualSkip: '再生中に「スキップ」を表示',
+    countdown: '残秒表示（予告は{seconds}秒前）',
+    countdownFrom: '残秒表示（予告は{seconds}秒前から）',
+    timeline: 'シークバーに区間を表示',
+    shortcutHint: 'Ctrl+←／Ctrl+→で前後のチャプターへ移動します',
+    shortcut: 'チャプターショートカット',
+    badgeHint: 'スキップ対象を探査して表示します。OFFにすると探査も停止します',
+    badge: 'スキップ対象バッジを表示',
+    commonDisplay: '共通表示',
+    advanced: '詳細設定',
+    countdownStart: '予告開始',
+    undoDuration: '戻す表示',
+    menuMovement: 'メニュー移動',
+    actionDuration: '操作表示',
+    secondsUnit: '秒',
+    restoreDefaults: '初期値に戻す',
+    settingsData: '設定データ',
+    backupHelp:
+      '全体・シーズン・シリーズ・詳細設定、初回履歴、タブ位置をJSONで移行します。',
+    export: '書き出し',
+    exportTitle: '現在の設定をJSONファイルへ保存',
+    import: '読み込み',
+    importTitle: 'JSONファイルから設定を復元',
+    exported: '設定を書き出しました',
+    exportFailed: '書き出しに失敗しました',
+    importConfirm:
+      '現在の設定・シーズン／シリーズ設定・初回履歴を、選択したバックアップで置き換えます。よろしいですか？',
+    importCancelled: '読み込みを中止しました',
+    imported: '読み込みました。画面を再読み込みします…',
+    importFailed: '読み込めません: {message}',
+    invalidFormat: '形式が不正です',
+    detectedRanges: '検出区間: {times}',
+    seasonNumber: 'シーズン {number}',
+    currentScope: '現在：{name}',
+    firstHistory: '初回履歴',
+    done: '済',
+    notYet: '未',
+    pausedFeedback: 'AutoSkipを一時停止しました',
+    resumedFeedback: 'AutoSkipを再開しました',
+    dragNote: '右端のタブは上下にドラッグできます',
+    cancelThisSkip: '今回の自動スキップをキャンセル',
+    cancelThisSkipHint: 'クリックすると今回の自動スキップをキャンセルします',
+    syncBack: '‹ 設定同期',
+    syncDrawerAria: 'Emby 設定同期',
+    waitingPlayback: '再生待機',
+    cancelled: 'キャンセル済',
+    undoSkip: 'スキップを元に戻す',
+    skipSection: 'この区間をスキップ',
+    undoHint: 'クリックするとスキップ開始位置へ戻ります',
+    skipHint: 'クリックするとこの区間をスキップします',
+    undo: '↶ 戻す',
+    skip: 'スキップ',
+    remaining: '残り {time}',
+    waiting: '再生待機中',
+    paused: '一時停止中',
+    available: 'スキップ機能利用可能・対象検知済み',
+    unavailable: 'スキップ機能利用不可・対象未検知',
+    handleStatusAria: 'AutoSkip {status}。クリックで設定、上下ドラッグで移動',
+    handleStatusTitle: 'AutoSkip {status} / クリック: 設定 / 上下ドラッグ: 位置移動',
+    chapter: 'チャプター',
+    chapterNumber: 'チャプター {number}',
+    beginning: '先頭',
+    skipTarget: 'Skip対象',
+    allSkipTargets: '全話Skip対象',
+    someSkipTargets: '一部Skip対象',
+    incompatibleLanguagePlugin: '言語プラグインに互換性がありません'
+  });
+
+  const languageRegistry = new Map([
+    ['ja', Object.freeze({
+      code: 'ja',
+      name: '日本語',
+      messages: JA_MESSAGES
+    })]
+  ]);
+  const languageChangeListeners = new Set();
+  let languagePreference = 'auto';
+  let activeLanguage = 'ja';
+  let languagePluginLoaded = false;
+
+  try {
+    languagePreference =
+      localStorage.getItem(LANGUAGE_STORE_KEY) || 'auto';
+  } catch (_) {}
+
+  const normalizeLanguageCode = value => String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/_/g, '-')
+    .split('-')[0];
+
+  function resolveLanguage() {
+    if (
+      languagePreference !== 'auto' &&
+      languageRegistry.has(normalizeLanguageCode(languagePreference))
+    ) {
+      return normalizeLanguageCode(languagePreference);
+    }
+
+    const browserLanguages = [
+      ...(Array.isArray(navigator.languages)
+        ? navigator.languages
+        : []),
+      navigator.language
+    ];
+
+    for (const language of browserLanguages) {
+      const code = normalizeLanguageCode(language);
+      if (languageRegistry.has(code)) return code;
+    }
+
+    return languageRegistry.has('en') ? 'en' : 'ja';
+  }
+
+  function formatMessage(template, params = {}) {
+    return String(template).replace(/\{(\w+)\}/g, (_, key) => (
+      Object.prototype.hasOwnProperty.call(params, key)
+        ? String(params[key])
+        : `{${key}}`
+    ));
+  }
+
+  function t(key, params) {
+    const messages = languageRegistry.get(activeLanguage)?.messages;
+    return formatMessage(
+      messages?.[key] ?? JA_MESSAGES[key] ?? key,
+      params
+    );
+  }
+
+  function notifyLanguageChanged() {
+    activeLanguage = resolveLanguage();
+
+    for (const listener of languageChangeListeners) {
+      try {
+        listener(activeLanguage);
+      } catch (error) {
+        console.warn(TAG, '言語切替の反映に失敗しました', error);
+      }
+    }
+  }
+
+  function onLanguageChanged(listener) {
+    if (typeof listener !== 'function') return () => {};
+    languageChangeListeners.add(listener);
+    return () => languageChangeListeners.delete(listener);
+  }
+
+  function setLanguagePreference(value) {
+    const next = value === 'auto'
+      ? 'auto'
+      : normalizeLanguageCode(value);
+
+    languagePreference = languageRegistry.has(next) ? next : 'auto';
+
+    try {
+      localStorage.setItem(LANGUAGE_STORE_KEY, languagePreference);
+    } catch (_) {}
+
+    notifyLanguageChanged();
+  }
+
+  activeLanguage = resolveLanguage();
+
+  const CANCEL_LABEL = () => t('cancel');
   const POLICIES = ['play', 'first', 'skip'];
 
   // =====================================
@@ -766,6 +961,33 @@
 
   function makePanel() {
     const root = document.createElement('div');
+    const languageBindings = [];
+
+    function bindText(node, key, params = () => ({})) {
+      const update = () => {
+        const values = typeof params === 'function' ? params() : params;
+        node.textContent = t(key, values);
+      };
+
+      languageBindings.push(update);
+      update();
+      return node;
+    }
+
+    function bindAttribute(node, name, key, params = () => ({})) {
+      const update = () => {
+        const values = typeof params === 'function' ? params() : params;
+        node.setAttribute(name, t(key, values));
+      };
+
+      languageBindings.push(update);
+      update();
+      return node;
+    }
+
+    function translatedText(key, params) {
+      return bindText(document.createTextNode(''), key, params);
+    }
 
     root.id = 'yagi-emby-autoskip-ui';
 
@@ -786,15 +1008,11 @@
 
     handle.type = 'button';
 
-    handle.setAttribute(
-      'aria-label',
-      '自動スキップ設定。クリックで開く、上下ドラッグで移動'
-    );
+    bindAttribute(handle, 'aria-label', 'handleAria');
 
     handle.setAttribute('aria-expanded', 'false');
 
-    handle.title =
-      'クリック: 設定 / 上下ドラッグ: 位置移動';
+    bindAttribute(handle, 'title', 'handleTitle');
 
     handle.style.cssText = [
       'position:fixed',
@@ -824,10 +1042,7 @@
 
     drawer.setAttribute('role', 'dialog');
 
-    drawer.setAttribute(
-      'aria-label',
-      'Emby 自動スキップ設定'
-    );
+    bindAttribute(drawer, 'aria-label', 'drawerAria');
 
     drawer.style.cssText = [
       'position:fixed',
@@ -866,15 +1081,12 @@
       'gap:8px',
       'margin-bottom:10px'
     ].join(';');
-    title.textContent = '⏭ 自動スキップ';
+    bindText(title, 'title');
     title.style.cssText = 'font-weight:bold;min-width:0';
     syncButton.type = 'button';
     syncButton.textContent = '☁';
-    syncButton.setAttribute(
-      'aria-label',
-      '設定同期は利用できません'
-    );
-    syncButton.title = '設定同期は利用できません';
+    bindAttribute(syncButton, 'aria-label', 'syncUnavailable');
+    bindAttribute(syncButton, 'title', 'syncUnavailable');
     syncButton.style.cssText = [
       'position:relative',
       'flex:0 0 29px',
@@ -891,8 +1103,7 @@
       'cursor:pointer'
     ].join(';');
     syncPage.style.display = 'none';
-    syncUnavailable.textContent =
-      '同期プラグインを読み込めませんでした。自動スキップは通常どおり利用できます。';
+    bindText(syncUnavailable, 'syncLoadFailed');
     syncUnavailable.style.cssText = [
       'padding:10px',
       'border:1px solid #687786',
@@ -923,14 +1134,14 @@
       'width:17px;height:17px;accent-color:#8a949e';
     suspendRow.append(
       suspendCheck,
-      document.createTextNode('AutoSkip 一時停止')
+      translatedText('suspend')
     );
     settingsPage.append(suspendRow);
 
-    const sectionTitle = text => {
+    const sectionTitle = key => {
       const element = document.createElement('div');
 
-      element.textContent = text;
+      bindText(element, key);
       element.style.cssText =
         'font-size:11px;opacity:.72;margin:10px 0 6px';
 
@@ -956,8 +1167,7 @@
       ].join(';');
     }
 
-    globalButton.textContent = '全体';
-    seriesButton.textContent = 'このシリーズ';
+    bindText(globalButton, 'global');
     scope.append(globalButton, seriesButton);
 
     const seriesName = document.createElement('div');
@@ -980,11 +1190,11 @@
       'width:17px;height:17px;accent-color:#4caf50';
     inheritRow.append(
       inheritCheck,
-      document.createTextNode('全体設定を使用')
+      translatedText('useGlobal')
     );
 
     settingsPage.append(
-      sectionTitle('スキップ設定'),
+      sectionTitle('skipSettings'),
       scope,
       seriesName,
       inheritRow
@@ -994,12 +1204,12 @@
     const optionControls = {};
     const targetTimeLabels = {};
 
-    function optionLabel(key, text) {
+    function optionLabel(key, textKey) {
       const label = document.createElement('span');
       const targetTime = document.createElement('small');
 
       label.style.cssText = 'display:grid;min-width:0';
-      label.append(document.createTextNode(text), targetTime);
+      label.append(translatedText(textKey), targetTime);
       targetTime.style.cssText = [
         'display:none',
         'margin-top:2px',
@@ -1052,14 +1262,14 @@
     });
     introRow.append(
       introCheck,
-      optionLabel('intro', 'イントロ・前回のあらすじ')
+      optionLabel('intro', 'intro')
     );
     settingsPage.append(introRow);
     optionControls.intro = introCheck;
 
-    for (const [key, label] of [
-      ['op', 'オープニング（OP）'],
-      ['outro', 'アウトロ（ED）']
+    for (const [key, labelKey] of [
+      ['op', 'op'],
+      ['outro', 'outro']
     ]) {
       const row = document.createElement('label');
       const select = document.createElement('select');
@@ -1081,15 +1291,15 @@
         'font:inherit'
       ].join(';');
 
-      for (const [value, text] of [
-        ['play', '常に再生'],
-        ['first', '初回のみ再生'],
-        ['skip', '常にスキップ']
+      for (const [value, textKey] of [
+        ['play', 'alwaysPlay'],
+        ['first', 'firstOnly'],
+        ['skip', 'alwaysSkip']
       ]) {
         const option = document.createElement('option');
 
         option.value = value;
-        option.textContent = text;
+        bindText(option, textKey);
         select.append(option);
       }
 
@@ -1097,7 +1307,7 @@
         saveOption(key, select.value);
       });
       row.append(
-        optionLabel(key, label),
+        optionLabel(key, labelKey),
         select
       );
       settingsPage.append(row);
@@ -1117,7 +1327,7 @@
       'font-size:11px'
     ].join(';');
     historyReset.type = 'button';
-    historyReset.textContent = '履歴をリセット';
+    bindText(historyReset, 'resetHistory');
     historyReset.style.cssText = [
       'border:1px solid #687786',
       'border-radius:6px',
@@ -1155,8 +1365,7 @@
       'padding:7px 0',
       'cursor:pointer'
     ].join(';');
-    manualSkipRow.title =
-      '「常に再生」または初回再生のOP／ED区間に表示します';
+    bindAttribute(manualSkipRow, 'title', 'manualSkipHint');
     manualSkipCheck.type = 'checkbox';
     manualSkipCheck.checked = settings.manualSkipButton;
     manualSkipCheck.style.cssText =
@@ -1168,7 +1377,7 @@
     });
     const manualSkipLabel = document.createElement('span');
 
-    manualSkipLabel.textContent = '再生中に「スキップ」を表示';
+    bindText(manualSkipLabel, 'manualSkip');
     manualSkipRow.append(
       manualSkipCheck,
       manualSkipLabel
@@ -1195,8 +1404,9 @@
     });
     const countdownLabel = document.createElement('span');
 
-    countdownLabel.textContent =
-      `残秒表示（予告は${CONFIG.countdownLeadSeconds}秒前）`;
+    bindText(countdownLabel, 'countdown', () => ({
+      seconds: CONFIG.countdownLeadSeconds
+    }));
     countdownRow.append(
       countdownCheck,
       countdownLabel
@@ -1216,7 +1426,7 @@
     });
     timelineRow.append(
       timelineCheck,
-      document.createTextNode('シークバーに区間を表示')
+      translatedText('timeline')
     );
 
     const shortcutRow = document.createElement('label');
@@ -1230,11 +1440,10 @@
       settings.chapterShortcuts = shortcutCheck.checked;
       saveSettings();
     });
-    shortcutRow.title =
-      'Ctrl+←／Ctrl+→で前後のチャプターへ移動します';
+    bindAttribute(shortcutRow, 'title', 'shortcutHint');
     shortcutRow.append(
       shortcutCheck,
-      document.createTextNode('チャプターショートカット')
+      translatedText('shortcut')
     );
 
     const badgeRow = document.createElement('label');
@@ -1249,15 +1458,14 @@
       saveSettings();
       badgeController?.update();
     });
-    badgeRow.title =
-      'スキップ対象を探査して表示します。OFFにすると探査も停止します';
+    bindAttribute(badgeRow, 'title', 'badgeHint');
     badgeRow.append(
       badgeCheck,
-      document.createTextNode('スキップ対象バッジを表示')
+      translatedText('badge')
     );
 
     settingsPage.append(
-      sectionTitle('共通表示'),
+      sectionTitle('commonDisplay'),
       manualSkipRow,
       countdownRow,
       timelineRow,
@@ -1275,7 +1483,7 @@
       'padding-top:7px',
       'border-top:1px solid #43515f'
     ].join(';');
-    advancedSummary.textContent = '詳細設定';
+    bindText(advancedSummary, 'advanced');
     advancedSummary.style.cssText = [
       'cursor:pointer',
       'font-size:11px',
@@ -1289,7 +1497,7 @@
       'margin-top:8px'
     ].join(';');
 
-    function advancedNumberRow(label, key, suffix) {
+    function advancedNumberRow(labelKey, key, suffixKey) {
       const limits = ADVANCED_CONFIG_FIELDS[key];
       const row = document.createElement('label');
       const input = document.createElement('input');
@@ -1308,7 +1516,7 @@
       input.step = String(limits.step);
       input.value = String(CONFIG[key]);
       input.inputMode = 'decimal';
-      input.setAttribute('aria-label', label);
+      bindAttribute(input, 'aria-label', labelKey);
       input.style.cssText = [
         'box-sizing:border-box',
         'width:57px',
@@ -1321,10 +1529,10 @@
         'font:inherit',
         'text-align:right'
       ].join(';');
-      unit.textContent = suffix;
+      bindText(unit, suffixKey);
       unit.style.opacity = '.75';
       row.append(
-        document.createTextNode(label),
+        translatedText(labelKey),
         input,
         unit
       );
@@ -1349,8 +1557,9 @@
           ? Math.round(stepped)
           : Number(stepped.toFixed(2));
         input.value = String(CONFIG[key]);
-        countdownLabel.textContent =
-          `残秒表示（予告は${CONFIG.countdownLeadSeconds}秒前から）`;
+        countdownLabel.textContent = t('countdownFrom', {
+          seconds: CONFIG.countdownLeadSeconds
+        });
         saveAdvancedSettings();
         applyMotionConfig();
         paintHandle();
@@ -1361,31 +1570,31 @@
 
     advancedGrid.append(
       advancedNumberRow(
-        '予告開始',
+        'countdownStart',
         'countdownLeadSeconds',
-        '秒'
+        'secondsUnit'
       ),
       advancedNumberRow(
-        '戻す表示',
+        'undoDuration',
         'undoDisplaySeconds',
-        '秒'
+        'secondsUnit'
       ),
       advancedNumberRow(
-        'メニュー移動',
+        'menuMovement',
         'drawerAnimationSeconds',
-        '秒'
+        'secondsUnit'
       ),
       advancedNumberRow(
-        '操作表示',
+        'actionDuration',
         'actionAnimationSeconds',
-        '秒'
+        'secondsUnit'
       )
     );
 
     const advancedReset = document.createElement('button');
 
     advancedReset.type = 'button';
-    advancedReset.textContent = '初期値に戻す';
+    bindText(advancedReset, 'restoreDefaults');
     advancedReset.style.cssText = [
       'justify-self:end',
       'margin-top:2px',
@@ -1411,8 +1620,9 @@
         console.warn(TAG, '詳細設定を初期化できません', error);
       }
 
-      countdownLabel.textContent =
-        `残秒表示（予告は${CONFIG.countdownLeadSeconds}秒前から）`;
+      countdownLabel.textContent = t('countdownFrom', {
+        seconds: CONFIG.countdownLeadSeconds
+      });
       applyMotionConfig();
       paintHandle();
       log('詳細設定を初期値へ戻しました');
@@ -1438,7 +1648,7 @@
       'padding-top:7px',
       'border-top:1px solid #43515f'
     ].join(';');
-    backupSummary.textContent = '設定データ';
+    bindText(backupSummary, 'settingsData');
     backupSummary.style.cssText = [
       'cursor:pointer',
       'font-size:11px',
@@ -1446,8 +1656,7 @@
       'color:#dbe5ee',
       'user-select:none'
     ].join(';');
-    backupDescription.textContent =
-      '全体・シーズン・シリーズ・詳細設定、初回履歴、タブ位置をJSONで移行します。';
+    bindText(backupDescription, 'backupHelp');
     backupDescription.style.cssText = [
       'margin-top:7px',
       'font-size:10px',
@@ -1476,10 +1685,10 @@
       ].join(';');
     }
 
-    exportButton.textContent = '書き出し';
-    exportButton.title = '現在の設定をJSONファイルへ保存';
-    importButton.textContent = '読み込み';
-    importButton.title = 'JSONファイルから設定を復元';
+    bindText(exportButton, 'export');
+    bindAttribute(exportButton, 'title', 'exportTitle');
+    bindText(importButton, 'import');
+    bindAttribute(importButton, 'title', 'importTitle');
     importInput.type = 'file';
     importInput.accept = 'application/json,.json';
     importInput.style.display = 'none';
@@ -1496,10 +1705,10 @@
     exportButton.addEventListener('click', () => {
       try {
         downloadSettingsBackup();
-        backupStatus.textContent = '設定を書き出しました';
+        backupStatus.textContent = t('exported');
         log('設定を書き出しました');
       } catch (error) {
-        backupStatus.textContent = '書き出しに失敗しました';
+        backupStatus.textContent = t('exportFailed');
         console.error(TAG, '設定を書き出せません', error);
       }
     });
@@ -1521,24 +1730,22 @@
 
         const backup = JSON.parse(await file.text());
         const values = validateSettingsBackup(backup);
-        const approved = window.confirm(
-          '現在の設定・シーズン／シリーズ設定・初回履歴を、選択したバックアップで置き換えます。よろしいですか？'
-        );
+        const approved = window.confirm(t('importConfirm'));
 
         if (!approved) {
-          backupStatus.textContent = '読み込みを中止しました';
+          backupStatus.textContent = t('importCancelled');
           return;
         }
 
         restoreSettingsBackup(values);
         notifySettingsChanged('restore');
-        backupStatus.textContent =
-          '読み込みました。画面を再読み込みします…';
+        backupStatus.textContent = t('imported');
         log('設定を読み込みました:', file.name);
         window.setTimeout(() => location.reload(), 500);
       } catch (error) {
-        backupStatus.textContent =
-          `読み込めません: ${error.message || '形式が不正です'}`;
+        backupStatus.textContent = t('importFailed', {
+          message: t('invalidFormat')
+        });
         console.error(TAG, '設定を読み込めません', error);
       }
     });
@@ -1555,6 +1762,77 @@
       window.requestAnimationFrame(() => position(y));
     });
     settingsPage.append(backupDetails);
+
+    const languageBox = document.createElement('div');
+    const languageRow = document.createElement('label');
+    const languageLabel = document.createElement('span');
+    const languageSelect = document.createElement('select');
+    const languagePluginHint = document.createElement('div');
+
+    languageBox.style.cssText = [
+      'margin-top:7px',
+      'padding-top:7px',
+      'border-top:1px solid #43515f'
+    ].join(';');
+    languageRow.style.cssText = [
+      'display:grid',
+      'grid-template-columns:1fr minmax(112px,auto)',
+      'align-items:center',
+      'gap:7px',
+      'font-size:11px'
+    ].join(';');
+    bindText(languageLabel, 'language');
+    languageSelect.style.cssText = [
+      'max-width:142px',
+      'height:29px',
+      'border:1px solid #687786',
+      'border-radius:6px',
+      'background:#202b36',
+      'color:#fff',
+      'font:inherit',
+      'font-size:11px'
+    ].join(';');
+    languagePluginHint.style.cssText = [
+      'font-size:8px',
+      'line-height:1.35',
+      'opacity:.42',
+      'text-align:center'
+    ].join(';');
+    bindText(languagePluginHint, 'languagePluginHint');
+    languageRow.append(languageLabel, languageSelect);
+    languageBox.append(languageRow, languagePluginHint);
+    settingsPage.append(languageBox);
+
+    function renderLanguageControl() {
+      const hasPlugin = languagePluginLoaded && languageRegistry.size > 1;
+
+      languageRow.style.display = hasPlugin ? 'grid' : 'none';
+      languagePluginHint.style.display = hasPlugin ? 'none' : 'block';
+      if (!hasPlugin) return;
+
+      languageSelect.replaceChildren();
+
+      const autoOption = document.createElement('option');
+      autoOption.value = 'auto';
+      autoOption.textContent = t('auto');
+      languageSelect.append(autoOption);
+
+      for (const language of languageRegistry.values()) {
+        const option = document.createElement('option');
+        option.value = language.code;
+        option.textContent = language.name;
+        languageSelect.append(option);
+      }
+
+      languageSelect.value = languagePreference === 'auto' ||
+        languageRegistry.has(languagePreference)
+        ? languagePreference
+        : 'auto';
+    }
+
+    languageSelect.addEventListener('change', () => {
+      setLanguagePreference(languageSelect.value);
+    });
 
     function targetTimeText(seconds) {
       const total = Math.max(0, Math.round(seconds));
@@ -1581,7 +1859,7 @@
           ? `${times[0]}${times.length > 1 ? ` +${times.length - 1}` : ''}`
           : '';
         label.title = times.length
-          ? `検出区間: ${times.join(', ')}`
+          ? t('detectedRanges', {times: times.join(', ')})
           : '';
         label.style.display = times.length ? 'inline' : 'none';
       }
@@ -1615,8 +1893,8 @@
 
       suspendCheck.checked = state.autoSkipSuspended;
       seriesButton.textContent = state.scopeKind === 'season'
-        ? 'このシーズン'
-        : 'このシリーズ';
+        ? t('thisSeason')
+        : t('thisSeries');
 
       globalButton.style.background = isSeries
         ? '#202b36'
@@ -1635,14 +1913,14 @@
             state.seasonName ||
             (
               state.seasonNumber !== ''
-                ? `シーズン ${state.seasonNumber}`
+                ? t('seasonNumber', {number: state.seasonNumber})
                 : state.seriesName
             )
           )
         : (state.seriesName || state.seriesId);
 
       seriesName.textContent = isSeries
-        ? `現在：${scopeName || state.scopeKey}`
+        ? t('currentScope', {name: scopeName || state.scopeKey})
         : '';
       seriesName.style.display = isSeries ? 'block' : 'none';
       inheritRow.style.display = isSeries ? 'flex' : 'none';
@@ -1670,9 +1948,9 @@
         ? 'flex'
         : 'none';
       historyStatus.textContent = [
-        '初回履歴',
-        `OP:${wasFirstPlayed('op') ? '済' : '未'}`,
-        `ED:${wasFirstPlayed('outro') ? '済' : '未'}`
+        t('firstHistory'),
+        `OP:${wasFirstPlayed('op') ? t('done') : t('notYet')}`,
+        `ED:${wasFirstPlayed('outro') ? t('done') : t('notYet')}`
       ].join(' ');
 
       // 設定対象の切替で高さが変わった場合も、
@@ -1747,15 +2025,14 @@
       renderSettings();
       log(
         state.autoSkipSuspended
-          ? 'AutoSkipを一時停止しました'
-          : 'AutoSkipを再開しました'
+          ? t('pausedFeedback')
+          : t('resumedFeedback')
       );
     });
 
     const note = document.createElement('div');
 
-    note.textContent =
-      '右端のタブは上下にドラッグできます';
+    bindText(note, 'dragNote');
 
     note.style.cssText =
       'font-size:11px;opacity:.7;margin-top:8px';
@@ -1767,12 +2044,8 @@
     const countdownCancel = document.createElement('span');
 
     countdownButton.type = 'button';
-    countdownButton.setAttribute(
-      'aria-label',
-      '今回の自動スキップをキャンセル'
-    );
-    countdownButton.title =
-      'クリックすると今回の自動スキップをキャンセルします';
+    bindAttribute(countdownButton, 'aria-label', 'cancelThisSkip');
+    bindAttribute(countdownButton, 'title', 'cancelThisSkipHint');
     countdownButton.style.cssText = [
       'position:fixed',
       'right:17px',
@@ -1800,7 +2073,7 @@
       'display:block;font-size:15px;font-weight:600;line-height:27px';
     countdownCancel.style.cssText =
       'display:block;font-size:9px;line-height:16px;opacity:.82;white-space:nowrap;word-break:keep-all';
-    countdownCancel.textContent = CANCEL_LABEL;
+    countdownCancel.textContent = CANCEL_LABEL();
     countdownButton.append(countdownMain, countdownCancel);
 
     root.append(drawer, countdownButton, handle);
@@ -1814,6 +2087,7 @@
     let isHovered = false;
     let yRatio = .48;
     let activePage = 'settings';
+    let currentSyncStatus = {};
 
     function showPage(page) {
       activePage = page === 'sync' ? 'sync' : 'settings';
@@ -1822,8 +2096,8 @@
       settingsPage.style.display = showingSync ? 'none' : 'block';
       syncPage.style.display = showingSync ? 'block' : 'none';
       title.textContent = showingSync
-        ? '‹ 設定同期'
-        : '⏭ 自動スキップ';
+        ? t('syncBack')
+        : t('title');
       title.style.cursor = showingSync ? 'pointer' : 'default';
       if (showingSync) {
         title.setAttribute('role', 'button');
@@ -1833,13 +2107,14 @@
       title.tabIndex = showingSync ? 0 : -1;
       drawer.setAttribute(
         'aria-label',
-        showingSync ? 'Emby 設定同期' : 'Emby 自動スキップ設定'
+        showingSync ? t('syncDrawerAria') : t('drawerAria')
       );
 
       window.requestAnimationFrame(() => position(y));
     }
 
     function setSyncStatus(status = {}) {
+      currentSyncStatus = status;
       const modes = {
         unavailable: {icon: '☁', color: '#8996a3'},
         disconnected: {icon: '☁', color: '#aeb8c2'},
@@ -1851,7 +2126,7 @@
       };
       const mode = modes[status.state] || modes.unavailable;
       const label = String(
-        status.label || '設定同期は利用できません'
+        status.label || t('syncUnavailable')
       );
       const detail = status.detail
         ? ` / ${String(status.detail)}`
@@ -1980,9 +2255,9 @@
 
       if (feedback) {
         countdownMain.style.lineHeight = '27px';
-        countdownMain.textContent = '再生待機';
+        countdownMain.textContent = t('waitingPlayback');
         countdownCancel.style.display = 'block';
-        countdownCancel.textContent = 'キャンセル済';
+        countdownCancel.textContent = t('cancelled');
         countdownButton.disabled = true;
         countdownButton.style.cursor = 'default';
         return;
@@ -1994,37 +2269,36 @@
       if (actionInfo?.kind === 'countdown') {
         countdownButton.setAttribute(
           'aria-label',
-          '今回の自動スキップをキャンセル'
+          t('cancelThisSkip')
         );
-        countdownButton.title =
-          'クリックすると今回の自動スキップをキャンセルします';
+        countdownButton.title = t('cancelThisSkipHint');
         countdownMain.style.lineHeight = '27px';
         countdownCancel.style.display = 'block';
         countdownMain.textContent =
           `${actionInfo.label} ${actionInfo.seconds}`;
-        countdownCancel.textContent = CANCEL_LABEL;
+        countdownCancel.textContent = CANCEL_LABEL();
       } else if (actionInfo) {
         const undo = actionInfo.kind === 'undo';
         const showRemaining = !undo && settings.countdown;
 
         countdownButton.setAttribute(
           'aria-label',
-          undo ? 'スキップを元に戻す' : 'この区間をスキップ'
+          undo ? t('undoSkip') : t('skipSection')
         );
         countdownButton.title = undo
-          ? 'クリックするとスキップ開始位置へ戻ります'
-          : 'クリックするとこの区間をスキップします';
+          ? t('undoHint')
+          : t('skipHint');
         countdownMain.style.lineHeight = showRemaining
           ? '27px'
           : '49px';
         countdownMain.textContent = undo
-          ? '↶ 戻す'
-          : 'スキップ';
+          ? t('undo')
+          : t('skip');
         countdownCancel.style.display = showRemaining
           ? 'block'
           : 'none';
         countdownCancel.textContent = showRemaining
-          ? `残り ${targetTimeText(actionInfo.seconds)}`
+          ? t('remaining', {time: targetTimeText(actionInfo.seconds)})
           : '';
       }
     }
@@ -2044,14 +2318,14 @@
     function paintHandle() {
       const skipTargetDetected = hasUsableSkipTarget();
       const statusText = !playbackAvailable
-        ? '再生待機中'
+        ? t('waiting')
         : (
             state.autoSkipSuspended
-              ? '一時停止中'
+              ? t('paused')
               : (
                   skipTargetDetected
-                    ? 'スキップ機能利用可能・対象検知済み'
-                    : 'スキップ機能利用不可・対象未検知'
+                    ? t('available')
+                    : t('unavailable')
                 )
           );
       const statusColor = !playbackAvailable || state.autoSkipSuspended
@@ -2064,10 +2338,9 @@
       handle.style.background = statusColor;
       handle.setAttribute(
         'aria-label',
-        `AutoSkip ${statusText}。クリックで設定、上下ドラッグで移動`
+        t('handleStatusAria', {status: statusText})
       );
-      handle.title =
-        `AutoSkip ${statusText} / クリック: 設定 / 上下ドラッグ: 位置移動`;
+      handle.title = t('handleStatusTitle', {status: statusText});
 
       handle.style.opacity =
         (
@@ -2331,9 +2604,20 @@
       }
     );
 
+    function applyLanguage() {
+      root.lang = activeLanguage;
+      for (const update of languageBindings) update();
+      renderLanguageControl();
+      renderSettings();
+      showPage(activePage);
+      setSyncStatus(currentSyncStatus);
+      paintHandle();
+      badgeController?.update();
+    }
+
+    onLanguageChanged(applyLanguage);
     position();
-    renderSettings();
-    paintHandle();
+    applyLanguage();
 
     return {
       root,
@@ -2394,8 +2678,9 @@
           advancedInputs[key].value = String(CONFIG[key]);
         }
 
-        countdownLabel.textContent =
-          `残秒表示（予告は${CONFIG.countdownLeadSeconds}秒前から）`;
+        countdownLabel.textContent = t('countdownFrom', {
+          seconds: CONFIG.countdownLeadSeconds
+        });
         applyMotionConfig();
         renderSettings();
         paintHandle();
@@ -2642,7 +2927,7 @@
 
     function showChapterFeedback(direction, chapter) {
       const arrow = direction === 'previous' ? '←' : '→';
-      const name = String(chapter.name || 'チャプター');
+      const name = String(chapter.name || t('chapter'));
 
       chapterFeedback.textContent =
         `${arrow} ${name}  ${formatTime(chapter.sec)}`;
@@ -2675,7 +2960,9 @@
     const chapters = state.chapters
       .map((chapter, index) => ({
         sec: Number(chapter.StartPositionTicks) / TICKS,
-        name: String(chapter.Name || `チャプター ${index + 1}`)
+        name: String(chapter.Name || t('chapterNumber', {
+          number: index + 1
+        }))
       }))
       .filter(chapter =>
         Number.isFinite(chapter.sec) &&
@@ -2688,7 +2975,7 @@
       );
 
     if (!chapters.length || chapters[0].sec > .25) {
-      chapters.unshift({sec: 0, name: '先頭'});
+      chapters.unshift({sec: 0, name: t('beginning')});
     }
 
     return chapters;
@@ -3037,7 +3324,9 @@
       const userPath = `/Users/${encodeURIComponent(auth.userId)}/Items`;
       if (item.Type === 'Episode' || item.Type === 'Movie') {
         const video = await apiGet(`${userPath}/${encodeURIComponent(item.Id)}`, signal);
-        return await inspectVideo(video, userPath, signal) ? 'Skip対象' : '';
+        return await inspectVideo(video, userPath, signal)
+          ? t('skipTarget')
+          : '';
       }
 
       let start = 0;
@@ -3069,7 +3358,9 @@
         start += page.Items.length;
       } while (start < total);
       if (checked !== total) throw new Error('話数一覧が不完全です');
-      return matched ? (matched === total ? '全話Skip対象' : '一部Skip対象') : '';
+      return matched
+        ? (matched === total ? t('allSkipTargets') : t('someSkipTargets'))
+        : '';
     }
 
     function schedule() {
@@ -4171,7 +4462,7 @@
     ) {
       ui.setSyncStatus({
         state: 'error',
-        label: '同期プラグインに互換性がありません'
+        label: t('syncUnavailable')
       });
       return false;
     }
@@ -4192,7 +4483,7 @@
           console.warn(TAG, '同期プラグインの初期化に失敗', error);
           ui.setSyncStatus({
             state: 'error',
-            label: '同期プラグインを開始できませんでした'
+            label: t('syncUnavailable')
           });
         });
       } else {
@@ -4206,15 +4497,54 @@
       console.warn(TAG, '同期プラグインの初期化に失敗', error);
       ui.setSyncStatus({
         state: 'error',
-        label: '同期プラグインを開始できませんでした'
+        label: t('syncUnavailable')
       });
       return false;
     }
   }
 
+  function registerLanguagePlugin(plugin) {
+    if (
+      !plugin ||
+      plugin.apiVersion !== LANGUAGE_PLUGIN_API_VERSION ||
+      !Array.isArray(plugin.languages)
+    ) {
+      console.warn(TAG, t('incompatibleLanguagePlugin'));
+      return false;
+    }
+
+    let registered = 0;
+
+    for (const language of plugin.languages) {
+      const code = normalizeLanguageCode(language?.code);
+      const name = String(language?.name || '').trim();
+
+      if (
+        !code ||
+        code === 'ja' ||
+        !name ||
+        !isRecord(language?.messages)
+      ) continue;
+
+      languageRegistry.set(code, Object.freeze({
+        code,
+        name,
+        messages: Object.freeze({...language.messages})
+      }));
+      registered++;
+    }
+
+    if (!registered) return false;
+
+    languagePluginLoaded = true;
+    notifyLanguageChanged();
+    return true;
+  }
+
   window.EmbyAutoSkip = {
     version: SCRIPT_VERSION,
     registerSyncPlugin,
+    registerLanguagePlugin,
 
     status: () => ({
       mode: state.mode,
@@ -4252,6 +4582,11 @@
         videoNow()?.currentTime,
       error: state.lastError,
       sessions: state.sessions,
+      language: {
+        preference: languagePreference,
+        active: activeLanguage,
+        available: [...languageRegistry.keys()]
+      },
       sync: typeof syncController?.status === 'function'
         ? syncController.status()
         : null
@@ -4278,6 +4613,10 @@
 
   if (window.EmbyAutoSkipSyncPlugin) {
     registerSyncPlugin(window.EmbyAutoSkipSyncPlugin);
+  }
+
+  if (window.EmbyAutoSkipLanguagePlugin) {
+    registerLanguagePlugin(window.EmbyAutoSkipLanguagePlugin);
   }
 
   badgeController = makeSkipBadges();
