@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Emby AutoSkip - First Play + Undo
 // @namespace    local.emby.autoskip
-// @version      1.13.0
+// @version      1.13.1
 // @description  Intro / OP / Outro auto skip with first-play rules, manual skip and undo
 // @match        http://*/*
 // @match        https://*/*
@@ -27,7 +27,7 @@
   const ADVANCED_STORE_KEY =
     'emby-autoskip-advanced-settings-v1';
   const LANGUAGE_STORE_KEY = 'emby-autoskip-language-v1';
-  const SCRIPT_VERSION = '1.13.0';
+  const SCRIPT_VERSION = '1.13.1';
   const SYNC_PLUGIN_API_VERSION = 1;
   const LANGUAGE_PLUGIN_API_VERSION = 1;
   const BACKUP_FORMAT = 'emby-autoskip-settings-backup';
@@ -49,7 +49,8 @@
     maxSkipRangeSeconds: 360,
     nextChapterMaxGapSeconds: 210,
     nonOutroStartLimitSeconds: 1200,
-    rangeEndGuardSeconds: 0.35
+    rangeEndGuardSeconds: 0.35,
+    terminalPlaybackReserveSeconds: 1.5
   });
   const CONFIG = {...DEFAULT_CONFIG};
   const ADVANCED_CONFIG_FIELDS = Object.freeze({
@@ -4142,10 +4143,12 @@
         continue;
       }
 
-      if (
-        video.currentTime >=
-        range.end - CONFIG.rangeEndGuardSeconds
-      ) continue;
+      const passedThreshold = Math.min(
+        range.end - CONFIG.rangeEndGuardSeconds,
+        skipDestination(video, range) - .5
+      );
+
+      if (video.currentTime >= passedThreshold) continue;
 
       state.skipped.delete(index);
 
@@ -4193,7 +4196,11 @@
     return Number.isFinite(video.duration)
       ? Math.min(
           range.end + .15,
-          video.duration - .3
+          Math.max(
+            0,
+            video.duration -
+              CONFIG.terminalPlaybackReserveSeconds
+          )
         )
       : range.end + .15;
   }

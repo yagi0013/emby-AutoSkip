@@ -2,7 +2,7 @@
 
 [トップページへ戻る](README.md) · [変更履歴](CHANGELOG.md)
 
-対象：本体 v1.13.0 / 言語プラグイン v1.0.0 / 同期プラグイン v1.0.5。
+対象：本体 v1.13.1 / 言語プラグイン v1.0.0 / 同期プラグイン v1.0.5。
 
 ## 動作確認済み環境
 
@@ -16,7 +16,7 @@
 
 | パス | 内容 |
 | --- | --- |
-| `emby-autoskip.js` | 現行版 v1.13.0（日本語内蔵、単体動作） |
+| `emby-autoskip.js` | 現行版 v1.13.1（日本語内蔵、単体動作） |
 | `emby-autoskip-i18n.js` | 任意追加の9言語プラグイン v1.0.0 |
 | `emby-autoskip-sync.js` | 任意追加の暗号化設定同期プラグイン v1.0.5 |
 | [SYNC_API.md](SYNC_API.md) | 同期APIのインターフェース仕様 |
@@ -151,7 +151,7 @@ sudo nano "$WEB/index.html"
 ```html
 <script src="emby-autoskip-sync.js?v=1.0.5" defer></script>
 <script src="emby-autoskip-i18n.js?v=1.0.0" defer></script>
-<script src="emby-autoskip.js?v=1.13.0" defer></script>
+<script src="emby-autoskip.js?v=1.13.1" defer></script>
 ```
 
 `?v=` はキャッシュ更新用の識別子です。今後JSを更新した場合も、それぞれのバージョンに合わせて変更してください。同期JSが欠損・停止していても、メインの自動スキップ機能はLocalStorageを使って通常動作します。
@@ -190,7 +190,7 @@ sudo grep -cF 'emby-autoskip.js' "$WEB/index.html"
 Emby Webで動画を再生し、ブラウザーの開発者ツール `F12` → Consoleで実行します。
 
 ```javascript
-EmbyAutoSkip.version            // "1.13.0"
+EmbyAutoSkip.version            // "1.13.1"
 EmbyAutoSkip.status()           // 現在の再生情報・適用設定・履歴・操作状態
 EmbyAutoSkip.inspect()          // チャプター一覧と判定したスキップ区間
 EmbyAutoSkip.retry()            // Emby API情報を再取得

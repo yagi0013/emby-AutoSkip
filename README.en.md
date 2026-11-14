@@ -5,7 +5,7 @@
 An unofficial JavaScript extension that automatically skips intros, recaps, openings, and endings in the Emby Web Player.
 It uses Emby chapter and intro markers and lets you decide what to play or skip for each title.
 
-**Core v1.13.0** / optional language plugin **v1.0.0** / optional sync plugin **v1.0.5**
+**Core v1.13.1** / optional language plugin **v1.0.0** / optional sync plugin **v1.0.5**
 
 [Setup and usage guide (Japanese)](GUIDE.md) · [Changelog (Japanese)](CHANGELOG.md) · [Releases](https://github.com/yagi0013/emby-AutoSkip/releases) · [Report an issue](https://github.com/yagi0013/emby-AutoSkip/issues)
 
@@ -26,7 +26,7 @@ The default configuration enables intro skipping, always skips openings, and alw
 
 | File | Version | Purpose |
 | --- | --- | --- |
-| [emby-autoskip.js](emby-autoskip.js) | 1.13.0 | Core script with built-in Japanese; works on its own |
+| [emby-autoskip.js](emby-autoskip.js) | 1.13.1 | Core script with built-in Japanese; works on its own |
 | [emby-autoskip-i18n.js](emby-autoskip-i18n.js) | 1.0.0 | Optional plugin providing nine additional languages |
 | [emby-autoskip-sync.js](emby-autoskip-sync.js) | 1.0.5 | Optional settings-sync plugin |
 
@@ -40,13 +40,11 @@ The core script remains fully usable by itself. To enable language selection, lo
 
 Settings synchronization requires HTTPS and a [compatible API](SYNC_API.md). This repository does not include an API server implementation or a shared public synchronization service.
 
-## What's new in v1.13.0
+## What's fixed in v1.13.1
 
-The core remains a standalone JavaScript file. Adding the language plugin enables automatic browser-language detection and immediate language switching from the settings panel. Unsupported browser languages fall back to English.
+When skipping an ending that continues to the end of a video, AutoSkip now leaves a short playback margin before the endpoint. This lets Emby's normal playback-ended handling run reliably and prevents playback from getting stuck instead of advancing to the next video.
 
-The Common settings section can now be collapsed in the same way as Advanced settings.
-
-When updating, replace the JavaScript files and update the existing script tag's `?v=1.13.0` cache identifier. The [update and recovery guide (Japanese)](GUIDE.md#アップデートロールバック) also explains how to restore the extension after an Emby update.
+When updating, replace the JavaScript files and update the existing script tag's `?v=1.13.1` cache identifier. The [update and recovery guide (Japanese)](GUIDE.md#アップデートロールバック) also explains how to restore the extension after an Emby update.
 
 ## Tested environment and limitations
 
