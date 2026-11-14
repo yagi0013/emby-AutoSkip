@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Emby AutoSkip - First Play + Undo
 // @namespace    local.emby.autoskip
-// @version      1.13.1
+// @version      1.13.2
 // @description  Intro / OP / Outro auto skip with first-play rules, manual skip and undo
 // @match        http://*/*
 // @match        https://*/*
@@ -27,7 +27,7 @@
   const ADVANCED_STORE_KEY =
     'emby-autoskip-advanced-settings-v1';
   const LANGUAGE_STORE_KEY = 'emby-autoskip-language-v1';
-  const SCRIPT_VERSION = '1.13.1';
+  const SCRIPT_VERSION = '1.13.2';
   const SYNC_PLUGIN_API_VERSION = 1;
   const LANGUAGE_PLUGIN_API_VERSION = 1;
   const BACKUP_FORMAT = 'emby-autoskip-settings-backup';
@@ -50,7 +50,9 @@
     nextChapterMaxGapSeconds: 210,
     nonOutroStartLimitSeconds: 1200,
     rangeEndGuardSeconds: 0.35,
-    terminalPlaybackReserveSeconds: 1.5
+    terminalPlaybackReserveSeconds: 1.5,
+    terminalRangeToleranceSeconds: 10,
+    terminalStallSeconds: 2
   });
   const CONFIG = {...DEFAULT_CONFIG};
   const ADVANCED_CONFIG_FIELDS = Object.freeze({
@@ -418,10 +420,12 @@
     sessions: [],
     busy: false,
     skipped: new Set(),
+    skippedDestinations: new Map(),
     cancelled: new Set(),
     undoReturned: new Set(),
     firstWatching: null,
     undo: null,
+    terminalSkip: null,
     generation: 0,
     lastDuration: 0
   };
@@ -931,10 +935,12 @@
 
   function clearPlaybackDecisions() {
     state.skipped.clear();
+    state.skippedDestinations.clear();
     state.cancelled.clear();
     state.undoReturned.clear();
     state.firstWatching = null;
     state.undo = null;
+    state.terminalSkip = null;
   }
 
   const rangeKey = range => [
@@ -4140,17 +4146,29 @@
 
       if (!range) {
         state.skipped.delete(index);
+        state.skippedDestinations.delete(index);
         continue;
       }
 
+      const skippedDestination =
+        state.skippedDestinations.get(index);
       const passedThreshold = Math.min(
         range.end - CONFIG.rangeEndGuardSeconds,
-        skipDestination(video, range) - .5
+        (
+          Number.isFinite(skippedDestination)
+            ? skippedDestination
+            : skipTarget(video, range).destination
+        ) - .5
       );
 
       if (video.currentTime >= passedThreshold) continue;
 
       state.skipped.delete(index);
+      state.skippedDestinations.delete(index);
+
+      if (state.terminalSkip?.index === index) {
+        state.terminalSkip = null;
+      }
 
       if (state.undo?.key === rangeKey(range)) {
         state.undo = null;
@@ -4192,30 +4210,99 @@
     }
   }
 
-  function skipDestination(video, range) {
-    return Number.isFinite(video.duration)
-      ? Math.min(
-          range.end + .15,
+  function bufferedEndAt(video, time) {
+    const ranges = video?.buffered;
+
+    if (!ranges) return NaN;
+
+    for (let i = ranges.length - 1; i >= 0; i--) {
+      const start = ranges.start(i);
+      const end = ranges.end(i);
+
+      if (
+        time >= start - .25 &&
+        time <= end + .25
+      ) return end;
+    }
+
+    return NaN;
+  }
+
+  function skipTarget(video, range) {
+    const fallback = range.end + .15;
+    const duration = video?.duration;
+
+    if (!Number.isFinite(duration)) {
+      return {
+        destination: fallback,
+        bufferedEnd: NaN,
+        terminalGap: 0
+      };
+    }
+
+    let limit = Math.max(
+      0,
+      duration - CONFIG.terminalPlaybackReserveSeconds
+    );
+    let bufferedEnd = NaN;
+    let terminalGap = 0;
+
+    const terminalOutro =
+      range.type === 'outro' &&
+      range.end >=
+        duration - CONFIG.terminalRangeToleranceSeconds;
+
+    if (terminalOutro) {
+      bufferedEnd = bufferedEndAt(
+        video,
+        video.currentTime
+      );
+
+      if (Number.isFinite(bufferedEnd)) {
+        terminalGap = Math.max(0, duration - bufferedEnd);
+        limit = Math.min(
+          limit,
           Math.max(
             0,
-            video.duration -
+            bufferedEnd -
               CONFIG.terminalPlaybackReserveSeconds
           )
-        )
-      : range.end + .15;
+        );
+      }
+    }
+
+    return {
+      destination: Math.min(fallback, limit),
+      bufferedEnd,
+      terminalGap
+    };
   }
 
   function performSkip(video, range, index, source) {
     if (state.autoSkipSuspended) return false;
 
     const from = video.currentTime;
-    const dest = skipDestination(video, range);
+    const target = skipTarget(video, range);
+    const dest = target.destination;
 
     if (dest <= from + .1) return false;
 
     video.currentTime = dest;
     state.skipped.add(index);
+    state.skippedDestinations.set(index, dest);
     state.firstWatching = null;
+    state.terminalSkip = target.terminalGap >
+      CONFIG.rangeEndGuardSeconds
+      ? {
+          itemId: state.id,
+          key: rangeKey(range),
+          index,
+          destination: dest,
+          lastPosition: dest,
+          lastAdvanceAt: Date.now(),
+          endedDispatched: false
+        }
+      : null;
     state.undo = {
       itemId: state.id,
       key: rangeKey(range),
@@ -4237,6 +4324,65 @@
     );
 
     return true;
+  }
+
+  function completeStalledTerminalSkip(video) {
+    const pending = state.terminalSkip;
+
+    if (!pending) return;
+
+    if (
+      pending.itemId !== state.id ||
+      pending.endedDispatched ||
+      video.ended
+    ) {
+      state.terminalSkip = null;
+      return;
+    }
+
+    if (
+      video.currentTime < pending.destination - .5 ||
+      state.autoSkipSuspended
+    ) {
+      state.terminalSkip = null;
+      return;
+    }
+
+    if (video.currentTime > pending.lastPosition + .05) {
+      pending.lastPosition = video.currentTime;
+      pending.lastAdvanceAt = Date.now();
+    }
+
+    if (video.paused || video.seeking) return;
+
+    const bufferedEnd = bufferedEndAt(
+      video,
+      video.currentTime
+    );
+
+    if (
+      !Number.isFinite(bufferedEnd) ||
+      !Number.isFinite(video.duration) ||
+      video.duration - bufferedEnd <=
+        CONFIG.rangeEndGuardSeconds ||
+      video.currentTime <
+        bufferedEnd - CONFIG.rangeEndGuardSeconds ||
+      Date.now() - pending.lastAdvanceAt <
+        CONFIG.terminalStallSeconds * 1000
+    ) return;
+
+    pending.endedDispatched = true;
+    state.undo = null;
+    ui.setAction(null);
+
+    log(
+      '実バッファ終端の停止を検出、再生終了を通知:',
+      video.currentTime.toFixed(1),
+      '/',
+      video.duration.toFixed(1)
+    );
+
+    video.dispatchEvent(new Event('ended'));
   }
 
   function manualSkip(action) {
@@ -4280,6 +4426,8 @@
     state.cancelled.add(undo.key);
     state.undoReturned.add(undo.key);
     state.skipped.delete(undo.index);
+    state.skippedDestinations.delete(undo.index);
+    state.terminalSkip = null;
     state.undo = null;
     ui.setAction(null);
 
@@ -4377,9 +4525,12 @@
       suppressReachedRanges(v);
       state.firstWatching = null;
       state.undo = null;
+      state.terminalSkip = null;
       ui.setAction(null);
       return;
     }
+
+    completeStalledTerminalSkip(v);
 
     rearmSkippedRanges(v);
     updateFirstPlayback(v);
@@ -4604,6 +4755,9 @@
         ? {...state.firstWatching}
         : null,
       undo: state.undo ? {...state.undo} : null,
+      terminalSkip: state.terminalSkip
+        ? {...state.terminalSkip}
+        : null,
       cancelled: [...state.cancelled],
       action: actionFor(videoNow()),
       videoTime:
