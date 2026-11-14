@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Emby AutoSkip - First Play + Undo
 // @namespace    local.emby.autoskip
-// @version      1.13.2
+// @version      1.13.3
 // @description  Intro / OP / Outro auto skip with first-play rules, manual skip and undo
 // @match        http://*/*
 // @match        https://*/*
@@ -27,7 +27,7 @@
   const ADVANCED_STORE_KEY =
     'emby-autoskip-advanced-settings-v1';
   const LANGUAGE_STORE_KEY = 'emby-autoskip-language-v1';
-  const SCRIPT_VERSION = '1.13.2';
+  const SCRIPT_VERSION = '1.13.3';
   const SYNC_PLUGIN_API_VERSION = 1;
   const LANGUAGE_PLUGIN_API_VERSION = 1;
   const BACKUP_FORMAT = 'emby-autoskip-settings-backup';
@@ -4300,6 +4300,7 @@
           destination: dest,
           lastPosition: dest,
           lastAdvanceAt: Date.now(),
+          waitingForResume: false,
           endedDispatched: false
         }
       : null;
@@ -4353,7 +4354,19 @@
       pending.lastAdvanceAt = Date.now();
     }
 
-    if (video.paused || video.seeking) return;
+    if (video.paused || video.seeking) {
+      pending.lastPosition = video.currentTime;
+      pending.lastAdvanceAt = Date.now();
+      pending.waitingForResume = true;
+      return;
+    }
+
+    if (pending.waitingForResume) {
+      pending.lastPosition = video.currentTime;
+      pending.lastAdvanceAt = Date.now();
+      pending.waitingForResume = false;
+      return;
+    }
 
     const bufferedEnd = bufferedEndAt(
       video,
